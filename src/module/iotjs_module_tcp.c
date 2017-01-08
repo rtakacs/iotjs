@@ -328,9 +328,14 @@ JHANDLER_FUNCTION(Connect) {
                          (const sockaddr*)(&addr), AfterConnect);
 
     if (err) {
+      fprintf(stderr, "uv_tcp_connect\n");
       iotjs_connect_reqwrap_dispatched(req_wrap);
     }
+  } else {
+    fprintf(stderr, "uv_ip4_addr\n");
   }
+
+  fprintf(stderr, "connection return: %d\n", err);
 
   iotjs_jhandler_return_number(jhandler, err);
 

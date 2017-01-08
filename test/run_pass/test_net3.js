@@ -21,8 +21,9 @@ var assert = require('assert');
 var port = 22703;
 var limit = 200;
 var server = net.createServer();
-
+print("after server");
 server.listen({ port: port });
+print("after listen");
 
 server.on('connection', function(socket) {
   var i = 0;
@@ -48,6 +49,7 @@ socket1.on('data', function(data) {
   msg1 += data;
 });
 
+print("socket1: " + socket1);
 
 var msg2 = '';
 var socket2 = net.createConnection({port: port});
