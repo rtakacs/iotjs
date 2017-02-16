@@ -32,6 +32,7 @@ from common_py import path
 from common_py.system.filesystem import FileSystem as fs
 from common_py.system.executor import Executor as ex
 from common_py.system.platform import Platform
+from run_tests import run_tests
 
 platform = Platform()
 
@@ -717,31 +718,24 @@ def build_iotjs(option):
 
 
 def run_checktest(option):
-    checktest_quiet = 'yes'
+    checktest_show_output = False
     if os.getenv('TRAVIS') == "true":
-        checktest_quiet = 'no'
+        checktest_show_output = True
 
     # iot.js executable
     iotjs = fs.join(build_root, 'iotjs', 'iotjs')
-    build_args = ['--', 'quiet='+checktest_quiet]
-    if len(option.iotjs_exclude_module) > 0:
-        skip_module = ','.join(option.iotjs_exclude_module)
-        build_args += ['skip-module='+skip_module]
 
     fs.chdir(path.PROJECT_ROOT)
-    code = ex.run_cmd(iotjs, [path.CHECKTEST_PATH] + build_args)
+
+    code = run_tests(iotjs)
     if code != 0:
         ex.fail('Failed to pass unit tests')
+
     if not option.no_check_valgrind:
-        code = ex.run_cmd('valgrind', ['--leak-check=full',
-                                       '--error-exitcode=5',
-                                       '--undef-value-errors=no',
-                                       iotjs,
-                                       path.CHECKTEST_PATH] + build_args)
-        if code == 5:
-            ex.fail('Failed to pass valgrind test')
+        code = run_tests(iotjs, prefix='valgrind --leak-check=full --error-exitcode=5 --undef-value-errors=no', skip_expected=True, show_output=checktest_show_output)
         if code != 0:
-            ex.fail('Failed to pass unit tests in valgrind environment')
+            ex.fail('Failed to pass unit tests in valgrind')
+
     return True
 
 

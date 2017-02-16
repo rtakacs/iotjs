@@ -48,7 +48,6 @@ typedef iotjs_jval_t (*register_func)();
   E(F, PWM, Pwm, pwm)                            \
   E(F, SPI, Spi, spi)                            \
   E(F, STM32F4DIS, Stm32f4dis, stm32f4dis)       \
-  E(F, TESTDRIVER, Testdriver, testdriver)       \
   E(F, TCP, Tcp, tcp)                            \
   E(F, TIMER, Timer, timer)                      \
   E(F, UART, Uart, uart)                         \
