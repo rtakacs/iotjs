@@ -29,78 +29,94 @@ from common_py.system.platform import Platform
 platform = Platform()
 
 
-class Reporter(object):
-    _TERM_PASS = "\033[1;32m"
-    _TERM_FAIL = "\033[1;31m"
-    _TERM_SKIP = "\033[1;33m"
-    _TERM_INFO = "\033[1;34m"
-    _TERM_BASE = "\033[0m"
-
-
-    @staticmethod
-    def report_testset(testset):
-        print()
-        print("%sRunning: %s%s" % (Reporter._TERM_INFO, testset, Reporter._TERM_BASE))
-
-
-    @staticmethod
-    def report_skip(test):
-        name = test.get("name")
-        reason = test.get("reason")
-
-        print("%sSKIP : %s (%s)%s" % (Reporter._TERM_SKIP, name, reason, Reporter._TERM_BASE))
-
-
-    @staticmethod
-    def report_pass(test):
-        print("%sPASS : %s%s" % (Reporter._TERM_PASS, test, Reporter._TERM_BASE))
-
-
-    @staticmethod
-    def report_fail(test):
-        print("%sFAIL : %s%s" % (Reporter._TERM_FAIL, test, Reporter._TERM_BASE))
-
-
-    @staticmethod
-    def report_timeout(test):
-        print("%sTIMEOUT : %s%s" % (Reporter._TERM_FAIL, test, Reporter._TERM_BASE))
-
-
-    @staticmethod
-    def report_final(results):
-        print("")
-        print("%sFinished with all tests%s" % (Reporter._TERM_INFO, test, Reporter._TERM_BASE))
-        print("%sPASS : %d%s" % (Reporter._TERM_PASS, results["pass"], Reporter._TERM_BASE))
-        print("%sFAIL : %d%s" % (Reporter._TERM_FAIL, results["fail"], Reporter._TERM_BASE))
-        print("%sSKIP : %d%s" % (Reporter._TERM_SKIP, results["skip"], Reporter._TERM_BASE))
-
-
-    @staticmethod
-    def report_error(message):
-        print()
-        print("%s%s%s" % (Reporter._TERM_RED, message, Reporter._TERM_BASE))
-
-
 class TimeoutException(Exception):
+    """
+    A basic Timeout Exception.
+    """
     pass
 
 
 class Timeout:
-    def __init__(self, seconds=1):
+    """
+    Decorator for timeout handling.
+    """
+    def __init__(self, seconds=300):
         self.seconds = seconds
-
 
     def handle_timeout(self, signum, frame):
         raise TimeoutException
-
 
     def __enter__(self):
         signal.signal(signal.SIGALRM, self.handle_timeout)
         signal.alarm(self.seconds)
 
-
     def __exit__(self, type, value, traceback):
         signal.alarm(0)
+
+
+class Color(object):
+    """
+    Contains terminal colors.
+    """
+    GREEN = "\033[1;32m"
+    RED = "\033[1;31m"
+    YELLOW = "\033[1;33m"
+    BLUE = "\033[1;34m"
+    BASE = "\033[0m"
+
+
+class Reporter(object):
+    """
+    Reporter class to print information about the testing.
+    """
+    @staticmethod
+    def message(msg, color):
+        print("%s%s%s" % (color, msg, Color.BASE))
+
+    @staticmethod
+    def report_testset(testset):
+        Reporter.message("\n\n\n>>>> %s" % testset, Color.BLUE)
+
+    @staticmethod
+    def report_pass(test):
+        test_name = test.get("name")
+
+        Reporter.message("PASS: %s" % test_name, Color.GREEN)
+
+    @staticmethod
+    def report_fail(test):
+        test_name = test.get("name")
+
+        Reporter.message("FAIL: %s" % test_name, Color.RED)
+
+    @staticmethod
+    def report_timeout(test):
+        test_name = test.get("name")
+
+        Reporter.message("TIMEOUT: %s" % test_name, Color.RED)
+
+    @staticmethod
+    def report_skip(test):
+        test_name = test.get("name")
+        skip_reason = test.get("reason")
+
+        skip_message = "SKIP: %s" % test_name
+        if skip_reason:
+            skip_message += "   (reason: %s)" % skip_reason
+
+        Reporter.message(skip_message, Color.YELLOW)
+
+    @staticmethod
+    def report_final(results):
+        Reporter.message("\n\n\nFinished with all tests", Color.BLUE)
+        Reporter.message("PASS:    %d" % results["pass"], Color.GREEN)
+        Reporter.message("FAIL:    %d" % results["fail"], Color.RED)
+        Reporter.message("TIMEOUT: %d" % results["timeout"], Color.RED)
+        Reporter.message("SKIP:    %d" % results["skip"], Color.YELLOW)
+
+    @staticmethod
+    def report_error(message):
+        Reporter.message(message, Color.RED)
 
 
 class TestRunner(object):
@@ -114,7 +130,6 @@ class TestRunner(object):
 
         self.results = { "pass": 0, "fail": 0, "skip": 0, "timeout": 0 }
 
-
     def run(self):
         with open(fs.join(path.TEST_ROOT, "testsets.json")) as testsets_file_p:
             testsets = json.load(testsets_file_p)
@@ -122,6 +137,7 @@ class TestRunner(object):
         for testset, tests in testsets.items():
             self.run_testset(testset, tests)
 
+        Reporter.report_final(self.results)
 
     def run_testset(self, testset, tests):
         Reporter.report_testset(testset)
@@ -133,7 +149,6 @@ class TestRunner(object):
                 continue
 
             self.run_test(testset, test)
-
 
     def run_test(self, testset, test):
             test_name = test.get("name")
@@ -161,7 +176,6 @@ class TestRunner(object):
 
             self.validate_results(test, exitcode, output)
 
-
     def validate_results(self, test, exitcode, output):
             test_name = test.get("name")
 
@@ -172,12 +186,11 @@ class TestRunner(object):
             output_is_ok = self.is_output_as_expected(expected_file)
 
             if (exitcode_is_ok and output_is_ok):
-                Reporter.report_pass(test_name)
+                Reporter.report_pass(test)
                 self.results["pass"] += 1
             else:
-                Reporter.report_fail(test_name)
+                Reporter.report_fail(test)
                 self.results["fail"] += 1
-
 
     def is_output_as_expected(self, expected_filename):
         if not expected_filename or self.skip_expected:
@@ -198,7 +211,6 @@ class TestRunner(object):
 
         return True
 
-
     def should_be_skipped(self, test):
         test_name = test.get("name")
         skip_list = test.get("skip", [])
@@ -209,7 +221,7 @@ class TestRunner(object):
         if not self.skip_modules:
             return False
 
-        if any(module in test_name for module in self.skip_modules.split()):
+        if any(module in test_name for module in self.skip_modules.split(",")):
             return True
 
         return False
@@ -233,6 +245,7 @@ def main():
 
     testrunner = TestRunner(arguments)
     testrunner.run()
+
 
 if __name__ == "__main__":
     main()
