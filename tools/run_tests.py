@@ -35,22 +35,35 @@ class Reporter(object):
     _TERM_INFO = "\033[1;34m"
     _TERM_BASE = "\033[0m"
 
+
     @staticmethod
     def report_testset(testset):
         print()
         print("%sRunning: %s%s" % (_TERM_INFO, testset, _TERM_BASE))
 
+
     @staticmethod
-    def report_skip(test, reason):
-        print("%sSKIP : %s (%s)%s" % (_TERM_SKIP, test, reason, _TERM_BASE))
+    def report_skip(test):
+        name = test.get("name")
+        reason = test.get("reason")
+
+        print("%sSKIP : %s (%s)%s" % (_TERM_SKIP, name, reason, _TERM_BASE))
+
 
     @staticmethod
     def report_pass(test):
         print("%sPASS : %s%s" % (_TERM_PASS, test, _TERM_BASE))
 
+
     @staticmethod
     def report_fail(test):
         print("%sFAIL : %s%s" % (_TERM_FAIL, test, _TERM_BASE))
+
+
+    @staticmethod
+    def report_fail(test):
+        print("%sTIMEOUT : %s%s" % (_TERM_FAIL, test, _TERM_BASE))
+
 
     @staticmethod
     def report_final(results):
@@ -61,78 +74,129 @@ class Reporter(object):
         print("%sSKIP : %d%s" % (_TERM_SKIP, results["skip"], _TERM_BASE))
 
 
+    @staticmethod
+    def report_error(message):
+        print()
+        print("%s%s%s" % (_TERM_RED, message, _TERM_BASE))
+
+
 class TestRunner(object):
     def __init__(self, arguments):
         self.iotjs = fs.abspath(arguments.iotjs)
         self.timeout = arguments.timeout
-        self.cmd_prefix = arguments.cmd_prefix
+        self.cmd_prefix = arguments.cmd_prefix.split()
         self.show_output = arguments.show_output
         self.skip_expected = arguments.skip_expected
+        self.skip_modules = arguments.skip_modules.split(",")
 
-        self.results = { "pass": 0, "fail": 0, "skip": 0 }
+        self.results = { "pass": 0, "fail": 0, "skip": 0, "timeout": 0 }
+
 
     def run(self):
-        with open(fs.join(path.TEST_ROOT, 'testsets.json')) as testsets_file:
-            testsets = json.load(testsets_file)
+        with open(fs.join(path.TEST_ROOT, "testsets.json")) as testsets_file_p:
+            testsets = json.load(testsets_file_p)
 
         for testset, tests in testsets.items():
             run_testset(testset, tests, results)
+
 
     def run_testset(self, testset, tests):
         Reporter.report_testset(testset)
 
         for test in tests:
-            test_name = test.get("name")
-            skip_list = test.get("skip", [])
-
-            if "all" in skip or platform.os() in skip_list:
-                Reporter.report_skip(test_name, test.get("reason", ""))
+            if should_be_skipped(test):
+                Reporter.report_skip(test)
                 self.results["skip"] += 1
                 continue
 
+            run_test(test)
+
+
+    def run_test(self, test):
+            test_name = test.get("name")
+
             timeout = test.get("timeout", self.timeout)
-            command = ["timeout", "-k", "30", timeout, self.iotjs, test_name]
+            command = [self.cmd_prefix, self.iotjs, test_name]
 
-            if self.cmd_prefix:
-                command.insert(1, self.cmd_prefix.split())
+            working_directory = fs.join(path.TEST_ROOT, testset)
 
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            with Timeout(timeout):
+                process = subprocess.Popen(command, cwd=working_directory,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            except TimeoutException:
+                Reporter.report_timeout(test)
+                self.results["timeout"] += 1
+                return
+
             output = process.communicate()[0]
             exitcode = process.returncode
 
             if self.show_output:
                 print(output, end='')
 
-            should_fail = test.get("fail", False)
-            
-            if (exitcode and should_fail) and (skip_expected or check_expected(test, output)):
-                self.results["pass"] += 1
-                Reporter.report_pass(test_name)
-            else:
-                self.results["fail"] += 1
-                Reporter.report_fail(test_name)
+            validate_results(test, exitcode, output)
 
-    def check_expected(test, output):
-        expected_file = test.get("expected")
-        if expected_file:
-            file_path = fs.join("expected", expected_file)
-            try:
-                with open(file_path) as input:
-                    if output != input.read():
-                        return False
-            except IOError:
-                print("Expected file not found: %s" % (file_path))
-                return False
+
+    def validate_results(self, test, exitcode, output):
+            test_name = test.get("name")
+
+            should_fail = test.get("fail", False)
+            expected_file = test.get("expected")
+
+            exitcode_is_ok = (exitcode and should_fail)
+            output_is_ok = is_output_as_expected(expected_file)
+
+            if (exitcode_is_ok and output_is_ok):
+                Reporter.report_pass(test_name)
+                self.results["pass"] += 1
+            else:
+                Reporter.report_fail(test_name)
+                self.results["fail"] += 1
+
+
+    def is_output_as_expected(self, expected_filename):
+        if not expected_filename or self.skip_expected:
+            return True
+
+        expected_file = fs.join(paths.TEST_ROOT, testset, expected_filename)
+
+        try:
+            with open(expected_file) as expected_file_p:
+                expected_output = expected_file_p.read()
+
+                if not output is expected_output:
+                    return False
+
+        except IOError as e:
+            Reporter.report_error(e.strerror)
+            return False
 
         return True
 
+
+    def should_be_skipped(self, test):
+        test_name = test.get("name")
+        skip_list = test.get("skip", [])
+
+        if any(module in test_name for module in self.skip_modules):
+            return True
+
+        if "all" in skip_list or platform.os() in skip_list:
+            return True
+
+        return False
+
+
 def get_args():
     parser = argparse.ArgumentParser()
+
     parser.add_argument('iotjs', action='store', help='IoT.js binary to run tests with')
     parser.add_argument('--timeout', action='store', default=300, type=int, help='Timeout for the tests in seconds (default: %(default)s)')
     parser.add_argument('--cmd-prefix', action='store', default="", help='Add a prefix to the command running the tests')
     parser.add_argument('--show-output', action='store_true', default=False, help='Print output of the tests (default: %(default)s)')
     parser.add_argument('--skip-expected', action='store_true', default=False, help='Do not check the output of the tests (default: %(default)s)')
+    parser.add?argument('--skip-modules', action='store', help='Skip tests that uses the given modules')
+
     return parser.parse_args()
 
 
