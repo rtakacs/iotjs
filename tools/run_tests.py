@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import argparse
 import json
+import signal
 import subprocess
 import os
 
@@ -39,7 +40,7 @@ class Reporter(object):
     @staticmethod
     def report_testset(testset):
         print()
-        print("%sRunning: %s%s" % (_TERM_INFO, testset, _TERM_BASE))
+        print("%sRunning: %s%s" % (Reporter._TERM_INFO, testset, Reporter._TERM_BASE))
 
 
     @staticmethod
@@ -47,47 +48,69 @@ class Reporter(object):
         name = test.get("name")
         reason = test.get("reason")
 
-        print("%sSKIP : %s (%s)%s" % (_TERM_SKIP, name, reason, _TERM_BASE))
+        print("%sSKIP : %s (%s)%s" % (Reporter._TERM_SKIP, name, reason, Reporter._TERM_BASE))
 
 
     @staticmethod
     def report_pass(test):
-        print("%sPASS : %s%s" % (_TERM_PASS, test, _TERM_BASE))
+        print("%sPASS : %s%s" % (Reporter._TERM_PASS, test, Reporter._TERM_BASE))
 
 
     @staticmethod
     def report_fail(test):
-        print("%sFAIL : %s%s" % (_TERM_FAIL, test, _TERM_BASE))
+        print("%sFAIL : %s%s" % (Reporter._TERM_FAIL, test, Reporter._TERM_BASE))
 
 
     @staticmethod
-    def report_fail(test):
-        print("%sTIMEOUT : %s%s" % (_TERM_FAIL, test, _TERM_BASE))
+    def report_timeout(test):
+        print("%sTIMEOUT : %s%s" % (Reporter._TERM_FAIL, test, Reporter._TERM_BASE))
 
 
     @staticmethod
     def report_final(results):
         print("")
-        print("%sFinished with all tests%s" % (_TERM_INFO, test, _TERM_BASE))
-        print("%sPASS : %d%s" % (_TERM_PASS, results["pass"], _TERM_BASE))
-        print("%sFAIL : %d%s" % (_TERM_FAIL, results["fail"], _TERM_BASE))
-        print("%sSKIP : %d%s" % (_TERM_SKIP, results["skip"], _TERM_BASE))
+        print("%sFinished with all tests%s" % (Reporter._TERM_INFO, test, Reporter._TERM_BASE))
+        print("%sPASS : %d%s" % (Reporter._TERM_PASS, results["pass"], Reporter._TERM_BASE))
+        print("%sFAIL : %d%s" % (Reporter._TERM_FAIL, results["fail"], Reporter._TERM_BASE))
+        print("%sSKIP : %d%s" % (Reporter._TERM_SKIP, results["skip"], Reporter._TERM_BASE))
 
 
     @staticmethod
     def report_error(message):
         print()
-        print("%s%s%s" % (_TERM_RED, message, _TERM_BASE))
+        print("%s%s%s" % (Reporter._TERM_RED, message, Reporter._TERM_BASE))
+
+
+class TimeoutException(Exception):
+    pass
+
+
+class Timeout:
+    def __init__(self, seconds=1):
+        self.seconds = seconds
+
+
+    def handle_timeout(self, signum, frame):
+        raise TimeoutException
+
+
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, self.handle_timeout)
+        signal.alarm(self.seconds)
+
+
+    def __exit__(self, type, value, traceback):
+        signal.alarm(0)
 
 
 class TestRunner(object):
     def __init__(self, arguments):
         self.iotjs = fs.abspath(arguments.iotjs)
         self.timeout = arguments.timeout
-        self.cmd_prefix = arguments.cmd_prefix.split()
+        self.cmd_prefix = arguments.cmd_prefix
         self.show_output = arguments.show_output
         self.skip_expected = arguments.skip_expected
-        self.skip_modules = arguments.skip_modules.split(",")
+        self.skip_modules = arguments.skip_modules
 
         self.results = { "pass": 0, "fail": 0, "skip": 0, "timeout": 0 }
 
@@ -97,22 +120,22 @@ class TestRunner(object):
             testsets = json.load(testsets_file_p)
 
         for testset, tests in testsets.items():
-            run_testset(testset, tests, results)
+            self.run_testset(testset, tests)
 
 
     def run_testset(self, testset, tests):
         Reporter.report_testset(testset)
 
         for test in tests:
-            if should_be_skipped(test):
+            if self.should_be_skipped(test):
                 Reporter.report_skip(test)
                 self.results["skip"] += 1
                 continue
 
-            run_test(test)
+            self.run_test(testset, test)
 
 
-    def run_test(self, test):
+    def run_test(self, testset, test):
             test_name = test.get("name")
 
             timeout = test.get("timeout", self.timeout)
@@ -120,9 +143,11 @@ class TestRunner(object):
 
             working_directory = fs.join(path.TEST_ROOT, testset)
 
-            with Timeout(timeout):
-                process = subprocess.Popen(command, cwd=working_directory,
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            try:
+                with Timeout(seconds=timeout):
+                    process = subprocess.Popen(command,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            cwd=working_directory, shell=True)
             except TimeoutException:
                 Reporter.report_timeout(test)
                 self.results["timeout"] += 1
@@ -134,7 +159,7 @@ class TestRunner(object):
             if self.show_output:
                 print(output, end='')
 
-            validate_results(test, exitcode, output)
+            self.validate_results(test, exitcode, output)
 
 
     def validate_results(self, test, exitcode, output):
@@ -143,8 +168,8 @@ class TestRunner(object):
             should_fail = test.get("fail", False)
             expected_file = test.get("expected")
 
-            exitcode_is_ok = (exitcode and should_fail)
-            output_is_ok = is_output_as_expected(expected_file)
+            exitcode_is_ok = not (exitcode and should_fail)
+            output_is_ok = self.is_output_as_expected(expected_file)
 
             if (exitcode_is_ok and output_is_ok):
                 Reporter.report_pass(test_name)
@@ -178,10 +203,13 @@ class TestRunner(object):
         test_name = test.get("name")
         skip_list = test.get("skip", [])
 
-        if any(module in test_name for module in self.skip_modules):
+        if "all" in skip_list or platform.os() in skip_list:
             return True
 
-        if "all" in skip_list or platform.os() in skip_list:
+        if not self.skip_modules:
+            return False
+
+        if any(module in test_name for module in self.skip_modules.split()):
             return True
 
         return False
@@ -195,7 +223,7 @@ def get_args():
     parser.add_argument('--cmd-prefix', action='store', default="", help='Add a prefix to the command running the tests')
     parser.add_argument('--show-output', action='store_true', default=False, help='Print output of the tests (default: %(default)s)')
     parser.add_argument('--skip-expected', action='store_true', default=False, help='Do not check the output of the tests (default: %(default)s)')
-    parser.add?argument('--skip-modules', action='store', help='Skip tests that uses the given modules')
+    parser.add_argument('--skip-modules', action='store', help='Skip tests that uses the given modules')
 
     return parser.parse_args()
 
