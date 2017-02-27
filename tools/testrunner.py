@@ -49,7 +49,7 @@ class Timeout:
 
 
 class Color(object):
-    GREEN = "\033[1;32m"
+    GREEN  = "\033[1;32m"
     RED = "\033[1;31m"
     YELLOW = "\033[1;33m"
     BLUE = "\033[1;34m"
@@ -63,48 +63,42 @@ class Reporter(object):
 
     @staticmethod
     def report_testset(testset):
-        Reporter.message("\n\n\n>>>> %s" % testset, Color.BLUE)
+        Reporter.message("\n\n\n")
+        Reporter.message("[%s]" % testset, Color.BLUE)
 
     @staticmethod
     def report_pass(test):
-        test_name = test.get("name")
-
-        Reporter.message("PASS: %s" % test_name, Color.GREEN)
+        Reporter.message("PASS: %s" % test, Color.GREEN)
 
     @staticmethod
     def report_fail(test):
-        test_name = test.get("name")
-
-        Reporter.message("FAIL: %s" % test_name, Color.RED)
+        Reporter.message("FAIL: %s" % test, Color.RED)
 
     @staticmethod
     def report_timeout(test):
-        test_name = test.get("name")
-
-        Reporter.message("TIMEOUT: %s" % test_name, Color.RED)
+        Reporter.message("TIMEOUT: %s" % test, Color.RED)
 
     @staticmethod
-    def report_skip(test):
-        test_name = test.get("name")
-        skip_reason = test.get("reason")
+    def report_error(message):
+        Reporter.message(message, Color.RED)
 
-        skip_message = "SKIP: %s" % test_name
+    @staticmethod
+    def report_skip(test, reason):
+        skip_message = "SKIP: %s" % test
+
         if skip_reason:
-            skip_message += "   (reason: %s)" % skip_reason
+            skip_message += "   (Reason: %s)" % reason
 
         Reporter.message(skip_message, Color.YELLOW)
 
     @staticmethod
     def report_final(results):
-        Reporter.message("\n\n\nFinished with all tests", Color.BLUE)
+        Reporter.message("\n\n\n")
+        Reporter.message("Finished with all tests", Color.BLUE)
         Reporter.message("PASS:    %d" % results["pass"], Color.GREEN)
         Reporter.message("FAIL:    %d" % results["fail"], Color.RED)
         Reporter.message("TIMEOUT: %d" % results["timeout"], Color.RED)
         Reporter.message("SKIP:    %d" % results["skip"], Color.YELLOW)
-
-    @staticmethod
-    def report_error(message):
-        Reporter.message(message, Color.RED)
 
 
 class TestRunner(object):
@@ -113,7 +107,10 @@ class TestRunner(object):
         self.timeout = arguments.timeout
         self.cmd_prefix = arguments.cmd_prefix
         self.show_output = arguments.show_output
-        self.skip_modules = arguments.skip_modules
+        self.skip_modules = []
+
+        if arguments.skip_modules:
+            self.skip_modules = arguments.skip_modules.split(",")
 
         self.results = { "pass": 0, "fail": 0, "skip": 0, "timeout": 0 }
 
@@ -131,7 +128,7 @@ class TestRunner(object):
 
         for test in tests:
             if self.skip_test(test):
-                Reporter.report_skip(test)
+                Reporter.report_skip(test["name"], test.get("reason"))
                 self.results["skip"] += 1
                 continue
 
@@ -139,10 +136,10 @@ class TestRunner(object):
             expected_failure = test.get("expected-failure", False)
 
             if (bool(exitcode) == expected_failure):
-                Reporter.report_pass(test)
+                Reporter.report_pass(test["name"])
                 self.results["pass"] += 1
             else:
-                Reporter.report_fail(test)
+                Reporter.report_fail(test["name"])
                 self.results["fail"] += 1
 
     def run_test(self, testset, test):
@@ -160,7 +157,7 @@ class TestRunner(object):
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
             except TimeoutException:
-                Reporter.report_timeout(test)
+                Reporter.report_timeout(test["name"])
                 self.results["timeout"] += 1
                 return
 
@@ -182,7 +179,7 @@ class TestRunner(object):
         if not self.skip_modules:
             return False
 
-        if any(module in test_name for module in self.skip_modules.split(",")):
+        if any(module in test_name for module in self.skip_modules):
             return True
 
         return False
