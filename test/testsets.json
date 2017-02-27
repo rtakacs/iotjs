@@ -72,17 +72,17 @@
     { "name": "issue-323.js" }
   ],
   "run_fail":  [
-    { "name": "assert_fail1.js", "fail": true },
-    { "name": "assert_fail2.js", "fail": true },
-    { "name": "assert_fail3.js", "fail": true },
-    { "name": "fs_callbacks_called.js", "fail": true },
-    { "name": "process_exit1.js", "fail": true },
-    { "name": "process_exit2.js", "fail": true },
-    { "name": "process_exitcode1.js", "fail": true },
-    { "name": "process_exitcode2.js", "fail": true },
-    { "name": "require_fail1.js", "fail": true },
-    { "name": "runtime_error1.js", "fail": true },
-    { "name": "syntax_fail1.js", "fail": true },
-    { "name": "uncaught_error_event.js", "fail": true }
+    { "name": "assert_fail1.js", "expected-failure": true },
+    { "name": "assert_fail2.js", "expected-failure": true },
+    { "name": "assert_fail3.js", "expected-failure": true },
+    { "name": "fs_callbacks_called.js", "expected-failure": true },
+    { "name": "process_exit1.js", "expected-failure": true },
+    { "name": "process_exit2.js", "expected-failure": true },
+    { "name": "process_exitcode1.js", "expected-failure": true },
+    { "name": "process_exitcode2.js", "expected-failure": true },
+    { "name": "require_fail1.js", "expected-failure": true },
+    { "name": "runtime_error1.js", "expected-failure": true },
+    { "name": "syntax_fail1.js", "expected-failure": true },
+    { "name": "uncaught_error_event.js", "expected-failure": true }
   ]
 }
