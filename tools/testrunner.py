@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2016-present Samsung Electronics Co., Ltd. and other contributors
+# Copyright 2017-present Samsung Electronics Co., Ltd. and other contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,13 +20,10 @@ import argparse
 import json
 import signal
 import subprocess
-import os
 
 from common_py import path
 from common_py.system.filesystem import FileSystem as fs
 from common_py.system.platform import Platform
-
-platform = Platform()
 
 
 class TimeoutException(Exception):
@@ -49,11 +46,11 @@ class Timeout:
 
 
 class Color(object):
-    GREEN  = "\033[1;32m"
     RED = "\033[1;31m"
-    YELLOW = "\033[1;33m"
-    BLUE = "\033[1;34m"
     BASE = "\033[0m"
+    BLUE = "\033[1;34m"
+    GREEN = "\033[1;32m"
+    YELLOW = "\033[1;33m"
 
 
 class Reporter(object):
@@ -77,10 +74,6 @@ class Reporter(object):
     @staticmethod
     def report_timeout(test):
         Reporter.message("TIMEOUT: %s" % test, Color.RED)
-
-    @staticmethod
-    def report_error(message):
-        Reporter.message(message, Color.RED)
 
     @staticmethod
     def report_skip(test, reason):
@@ -115,7 +108,9 @@ class TestRunner(object):
         self.results = { "pass": 0, "fail": 0, "skip": 0, "timeout": 0 }
 
     def run(self):
-        with open(fs.join(path.TEST_ROOT, "testsets.json")) as testsets_file_p:
+        testsets_file = fs.join(path.TEST_ROOT, "testsets.json")
+
+        with open(testsets_file) as testsets_file_p:
             testsets = json.load(testsets_file_p)
 
         for testset, tests in testsets.items():
@@ -135,52 +130,46 @@ class TestRunner(object):
             exitcode = self.run_test(testset, test)
             expected_failure = test.get("expected-failure", False)
 
-            if (bool(exitcode) == expected_failure):
+            if exitcode == "TIMEOUT":
+                Reporter.report_timeout(test["name"])
+                self.results["timeout"] += 1
+
+            elif (bool(exitcode) == expected_failure):
                 Reporter.report_pass(test["name"])
                 self.results["pass"] += 1
+
             else:
                 Reporter.report_fail(test["name"])
                 self.results["fail"] += 1
 
     def run_test(self, testset, test):
-            timeout = test.get("timeout", self.timeout)
-            command = [self.iotjs, test["name"]]
-
-            if self.cmd_prefix:
-                command.insert(0, self.cmd_prefix)
-
-            working_directory = fs.join(path.TEST_ROOT, testset)
+            workdir = fs.join(path.TEST_ROOT, testset)
+            command = [self.cmd_prefix + self.iotjs, test["name"]]
 
             try:
-                with Timeout(seconds=timeout):
-                    process = subprocess.Popen(command, cwd=working_directory,
+                with Timeout(seconds=test.get("timeout", self.timeout)):
+                    process = subprocess.Popen(command, cwd=workdir,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
             except TimeoutException:
-                Reporter.report_timeout(test["name"])
-                self.results["timeout"] += 1
-                return
+                return "TIMEOUT"
 
             output = process.communicate()[0]
             exitcode = process.returncode
 
             if self.show_output:
-                print(output, end='')
+                print(output, end="")
 
             return exitcode
 
     def skip_test(self, test):
-        test_name = test.get("name")
         skip_list = test.get("skip", [])
 
-        if "all" in skip_list or platform.os() in skip_list:
+        if "all" in skip_list or Platform().os() in skip_list:
             return True
 
-        if not self.skip_modules:
-            return False
-
-        if any(module in test_name for module in self.skip_modules):
-            return True
+        for module in self.skip_modules:
+            if module in test["name"]:
+                return True
 
         return False
 
@@ -188,11 +177,16 @@ class TestRunner(object):
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('iotjs', action='store', help='IoT.js binary to run tests with')
-    parser.add_argument('--cmd-prefix', action='store', help='Add a prefix to the command running the tests')
-    parser.add_argument('--show-output', action='store_true', default=False, help='Print output of the tests (default: %(default)s)')
-    parser.add_argument('--skip-modules', action='store', help='Skip tests that uses the given modules')
-    parser.add_argument('--timeout', action='store', default=300, type=int, help='Timeout for the tests in seconds (default: %(default)s)')
+    parser.add_argument("iotjs", action="store",
+            help="IoT.js binary to run tests with")
+    parser.add_argument("--cmd-prefix", action="store", default= "",
+            help="Add a prefix to the command running the tests")
+    parser.add_argument("--show-output", action="store_true", default=False,
+            help="Print output of the tests (default: %(default)s)")
+    parser.add_argument("--skip-modules", action="store",
+            help="Skip the tests that uses the given modules")
+    parser.add_argument("--timeout", action="store", default=300, type=int,
+            help="Timeout for the tests in seconds (default: %(default)s)")
 
     return parser.parse_args()
 
