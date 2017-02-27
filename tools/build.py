@@ -28,6 +28,7 @@ import re
 import os
 
 from js2c import js2c
+from testrunner import TestRunner
 from common_py import path
 from common_py.system.filesystem import FileSystem as fs
 from common_py.system.executor import Executor as ex
@@ -662,32 +663,37 @@ def build_iotjs(options):
     copy_build_target(src_name, build_home, dst_dir, dst_name)
 
 
-def run_checktest(options):
-    checktest_quiet = 'yes'
+def run_testrunner(options):
+    show_output = False
     if os.getenv('TRAVIS') == "true":
-        checktest_quiet = 'no'
+        show_output = True
 
     # iot.js executable
     iotjs = fs.join(options.build_root, 'iotjs', 'iotjs')
-    build_args = ['--', 'quiet=' + checktest_quiet]
-    if options.iotjs_exclude_module:
-        skip_module = ','.join(options.iotjs_exclude_module)
-        build_args.append('skip-module=' + skip_module)
 
-    fs.chdir(path.PROJECT_ROOT)
-    code = ex.run_cmd(iotjs, [path.CHECKTEST_PATH] + build_args)
-    if code != 0:
-        ex.fail('Failed to pass unit tests')
+    arguments = argparse.Namespace()
+    arguments.iotjs = iotjs
+    arguments.cmd_prefix = None
+    arguments.skip_modules = None
+    arguments.timeout=300
+    arguments.show_output = show_output
+
+    if options.iotjs_exclude_module:
+        skip_modules = ','.join(options.iotjs_exclude_module)
+        arguments.skip_modules = skip_modules
+
+    testrunner = TestRunner(arguments)
+    testrunner.run()
+
     if not options.no_check_valgrind:
-        code = ex.run_cmd('valgrind', ['--leak-check=full',
-                                       '--error-exitcode=5',
-                                       '--undef-value-errors=no',
-                                       iotjs,
-                                       path.CHECKTEST_PATH] + build_args)
-        if code == 5:
-            ex.fail('Failed to pass valgrind test')
-        if code != 0:
-            ex.fail('Failed to pass unit tests in valgrind environment')
+        valgrind_options = [
+            '--leak-check=full',
+            '--error-exitcode=5',
+            '--undef-value-errors=no'
+        ]
+
+        testrunner.cmd_prefix = ['valgrind'] + valgrind_options
+        testrunner.run()
 
 
 if __name__ == '__main__':
@@ -731,6 +737,6 @@ if __name__ == '__main__':
         elif options.buildlib:
             print("Skip unit tests - build target is library\n")
         else:
-            run_checktest(options)
+            run_testrunner(options)
 
     print("\n%sIoT.js Build Succeeded!!%s\n" % (ex._TERM_GREEN, ex._TERM_EMPTY))
