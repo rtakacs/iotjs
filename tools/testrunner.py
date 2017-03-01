@@ -90,17 +90,18 @@ def alarm_handler(signum, frame):
 
 class TestRunner(object):
     def __init__(self, arguments):
-        self.iotjs = fs.abspath(arguments.iotjs)
-        self.show_output = arguments.show_output
-        self.timeout = arguments.timeout
-        self.cmd_prefix = []
-        self.skip_modules = []
+        self.iotjs = fs.abspath(getattr(arguments, "iotjs", ""))
+        self.timeout = getattr(arguments, "timeout", 300)
+        self.cmd_prefix = getattr(arguments, "cmd_prefix", [])
+        self.show_output = getattr(arguments, "show_output", False)
+        self.skip_modules = getattr(arguments, "skip_modules", [])
+
         self.results = {}
 
-        if arguments.cmd_prefix:
+        if self.cmd_prefix:
             self.cmd_prefix = arguments.cmd_prefix.split()
 
-        if arguments.skip_modules:
+        if self.skip_modules:
             self.skip_modules = arguments.skip_modules.split(",")
 
         signal.signal(signal.SIGALRM, alarm_handler)
@@ -187,13 +188,13 @@ class TestRunner(object):
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("iotjs", action="store",
+    parser.add_argument("iotjs", action="store", default="",
             help="IoT.js binary to run tests with")
-    parser.add_argument("--cmd-prefix", action="store",
+    parser.add_argument("--cmd-prefix", action="store", default=[],
             help="Add a prefix to the command running the tests")
     parser.add_argument("--show-output", action="store_true", default=False,
             help="Print output of the tests (default: %(default)s)")
-    parser.add_argument("--skip-modules", action="store",
+    parser.add_argument("--skip-modules", action="store", default=[],
             help="Skip the tests that uses the given modules")
     parser.add_argument("--timeout", action="store", default=300, type=int,
             help="Timeout for the tests in seconds (default: %(default)s)")

@@ -673,9 +673,6 @@ def run_testrunner(options):
 
     arguments = argparse.Namespace()
     arguments.iotjs = iotjs
-    arguments.cmd_prefix = None
-    arguments.skip_modules = None
-    arguments.timeout=300
     arguments.show_output = show_output
 
     if options.iotjs_exclude_module:
