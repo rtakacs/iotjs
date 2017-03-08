@@ -53,6 +53,7 @@ OptionParser.prototype.parse = function() {
     var arg_val = option.split("=");
 
     if (arg_val.length != 2 || !arg_val[0] || !arg_val[1]) {
+      this.printHelp();
       return null;
     }
 
@@ -68,8 +69,10 @@ OptionParser.prototype.parse = function() {
       }
     }
 
-    if (!found)
+    if (!found) {
+      this.printHelp();
       return null;
+    }
   }
 
   return options;

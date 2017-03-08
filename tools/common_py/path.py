@@ -50,7 +50,7 @@ TUV_ROOT = fs.join(DEPS_ROOT, 'libtuv')
 HTTPPARSER_ROOT = fs.join(DEPS_ROOT, 'http-parser')
 
 # checktest
-CHECKTEST_PATH = fs.join(TOOLS_ROOT, 'check_test.js')
+TESTRUNNER_PATH = fs.join(TOOLS_ROOT, 'testrunner.js')
 
 # Build configuration file path.
 BUILD_CONFIG_PATH = fs.join(PROJECT_ROOT, 'build.config')

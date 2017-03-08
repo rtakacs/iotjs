@@ -169,16 +169,21 @@
 
 
     process.exit = function(code) {
-      try {
-        process.emitExit(code);
-      } catch (e) {
-        process.exitCode = 1;
-        process._onUncaughtExcecption(e);
-      } finally {
-        process.doExit(process.exitCode || 0);
+      // Do not exit when testrunner is running.
+      if (process.testrunner) {
+        process.testrunner.finishTest(code);
+      } else {
+        try {
+          process.emitExit(code);
+        } catch (e) {
+          process.exitCode = 1;
+          process._onUncaughtExcecption(e);
+        } finally {
+          process.doExit(process.exitCode || 0);
+        }
       }
-    };
-  }
+    }
+  };
 
 
   function Native(id) {

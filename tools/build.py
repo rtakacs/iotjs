@@ -680,7 +680,7 @@ def run_checktest(options):
         build_args.append('skip-module=' + skip_module)
 
     fs.chdir(path.PROJECT_ROOT)
-    code = ex.run_cmd(iotjs, [path.CHECKTEST_PATH] + build_args)
+    code = ex.run_cmd(iotjs, [path.TESTRUNNER_PATH] + build_args)
     if code != 0:
         ex.fail('Failed to pass unit tests')
     if not options.no_check_valgrind:
@@ -688,7 +688,7 @@ def run_checktest(options):
                                        '--error-exitcode=5',
                                        '--undef-value-errors=no',
                                        iotjs,
-                                       path.CHECKTEST_PATH] + build_args)
+                                       path.TESTRUNNER_PATH] + build_args)
         if code == 5:
             ex.fail('Failed to pass valgrind test')
         if code != 0:

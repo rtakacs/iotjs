@@ -15,7 +15,7 @@
 
 var fs = require('fs');
 
-function Logger(path) {
+function Logger() {
   this.text_colors = {
     red: "\033[1;31m",
     yellow: "\033[1;33m",
@@ -30,10 +30,12 @@ function Logger(path) {
     timeout: "timeout",
     summary: "summary"
   }
-  this.path = path;
+  this.path = null;
 
   return this;
 }
+
+
 
 Logger.prototype.message = function (msg, status) {
   if (this.path) {
