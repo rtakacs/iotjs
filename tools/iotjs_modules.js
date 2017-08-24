@@ -1,4 +1,4 @@
-/* Copyright 2016-present Samsung Electronics Co., Ltd. and other contributors
+/* Copyright 2017-present Samsung Electronics Co., Ltd. and other contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,4 +13,8 @@
  * limitations under the License.
  */
 
-module.exports = process.binding(process.binding.testdriver);
+/* Just for the testrunner to get the supported modules. */
+var native_modules = Object.keys(process.native_sources)
+var binding_modules = Object.keys(process.binding)
+
+console.log(native_modules.concat(binding_modules))

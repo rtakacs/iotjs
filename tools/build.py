@@ -32,6 +32,7 @@ from common_py import path
 from common_py.system.filesystem import FileSystem as fs
 from common_py.system.executor import Executor as ex
 from common_py.system.platform import Platform
+from testrunner import TestRunner
 
 platform = Platform()
 
@@ -428,37 +429,43 @@ def build_iotjs(options):
     run_make(options, options.build_root)
 
 
-def run_checktest(options):
-    checktest_quiet = 'yes'
+def run_testrunner(options):
+    show_output = True
     if os.getenv('TRAVIS') == "true":
-        checktest_quiet = 'no'
+        show_output = True
 
-    # IoT.js executable
+    # IoT.js executable and its builtin modules
     iotjs = fs.join(options.build_root, 'bin', 'iotjs')
-    build_args = ['quiet=' + checktest_quiet]
+    builtins = ex.run_cmd_output(iotjs, [path.IOTJS_BUILTIN_LIST])
+
+    # Options for the testrunner 
+    arguments = argparse.Namespace()
+    arguments.iotjs = iotjs
+    arguments.builtins = builtins.split(',')
+    arguments.cmd_prefix = None
+    arguments.skip_modules = None
+    arguments.timeout = 300 # sec
+    arguments.experimental = False
+    arguments.show_output = show_output
+
     if options.iotjs_exclude_module:
-        skip_module = ','.join(options.iotjs_exclude_module)
-        build_args.append('skip-module=' + skip_module)
+        skip_modules = ','.join(options.iotjs_exclude_module)
+        arguments.skip_modules = skip_module
 
-    # experimental
     if options.experimental:
-        build_args.append('experimental=' + 'yes');
+        arguments.experimental = True
 
-    fs.chdir(path.PROJECT_ROOT)
-    code = ex.run_cmd(iotjs, [path.CHECKTEST_PATH] + build_args)
-    if code != 0:
-        ex.fail('Failed to pass unit tests')
-    if not options.no_check_valgrind:
-        code = ex.run_cmd('valgrind', ['--leak-check=full',
-                                       '--error-exitcode=5',
-                                       '--undef-value-errors=no',
-                                       iotjs,
-                                       path.CHECKTEST_PATH] + build_args)
-        if code == 5:
-            ex.fail('Failed to pass valgrind test')
-        if code != 0:
-            ex.fail('Failed to pass unit tests in valgrind environment')
+    testrunner = TestRunner(arguments)
+    testrunner.run()
 
+    valgrind_options = [
+        '--leak-check=full',
+        '--error-exitcode=5',
+        '--undef-value-errors=no'
+    ]
+
+    testrunner.cmd_prefix = ['valgrind'] + valgrind_options
+    testrunner.run()
 
 if __name__ == '__main__':
     # Initialize build option object.
@@ -486,7 +493,7 @@ if __name__ == '__main__':
         elif (options.host_tuple == options.target_tuple or
               (options.host_tuple == 'x86_64-linux' and
                options.target_tuple == 'i686-linux')):
-             run_checktest(options)
+             run_testrunner(options)
         else:
             print("Skip unit tests - target-host pair is not allowed\n")
 
