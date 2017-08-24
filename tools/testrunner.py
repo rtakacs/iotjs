@@ -181,12 +181,6 @@ class TestRunner(object):
             if i in skip_list:
                 return True
 
-        # Skip by the `--skip-modules` flag.
-        for module in self.skip_modules:
-            if module in test["name"]:
-                return True
-
-        # Skip test if the required module is not enabled.
         name = test["name"][0:-3]
         parts = name.split('_')
 
@@ -195,13 +189,21 @@ class TestRunner(object):
         if parts[0] != 'test':
             return False
 
+        tested_module = parts[1]
+
+        # Skip by the `--skip-modules` flag.
+        for module in self.skip_modules:
+            if module == tested_module:
+                test["reason"] = "The required module is skipped by the skip-modules flag."
+                return True
+
         # The second part of the array contains the module
         # which is under test.
-        tested_module = parts[1]
         for module in self.builtins:
             if module == tested_module:
                 return False
 
+        test["reason"] = "The required module is not enabled."
         return True
 
 
