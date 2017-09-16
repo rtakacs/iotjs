@@ -28,6 +28,47 @@ from common_py.system.executor import Executor as ex
 from common_py.system.platform import Platform
 
 
+# Defines the folder that will contain the coverity info.
+# The path must be consistent with the measure_coverage.sh script.
+JS_COVERAGE_FOLDER = fs.join(path.PROJECT_ROOT, '.coverage_output')
+
+# This code should be applied to each testfile.
+JS_COVERAGE_CODE = (
+"""
+// Generated code.
+process.on('exit', function() {{
+  if (typeof __coverage__ == 'undefined')
+    return;
+
+  if (typeof fs == 'undefined')
+    var fs = require('fs');
+
+  if (!fs.existsSync('{folder}'))
+    fs.mkdirSync('{folder}');
+
+  var filename = '{folder}/{file}';
+  fs.writeFileSync(filename, Buffer(JSON.stringify(__coverage__)));
+}})
+"""
+)
+
+
+# Append coverity source to the approptiate test.
+def append_coverity_code(filename):
+    with open(fs.join(path.TEST_ROOT, filename), 'a+') as testfile:
+        testfile.write(JS_COVERAGE_CODE.format(
+            folder=JS_COVERAGE_FOLDER, file=filename.split('/')[1]))
+
+
+# Remove coverity source from the approptiate test.
+def remove_coverity_code(filename):
+    with open(fs.join(path.TEST_ROOT, filename), 'r') as testfile:
+        content = testfile.read().rsplit('\n// Generated code.')[0]
+
+    with open(fs.join(path.TEST_ROOT, filename), 'w') as testfile:
+        testfile.write(content)
+
+
 class Reporter(object):
     @staticmethod
     def message(msg="", color=ex._TERM_EMPTY):
@@ -131,12 +172,17 @@ class TestRunner(object):
         Reporter.report_testset(testset)
 
         for test in tests:
+            testfile = fs.join(testset, test["name"])
+            timeout = test.get("timeout", self.timeout)
+
             if self.skip_test(test):
                 Reporter.report_skip(test["name"], test.get("reason"))
                 self.results["skip"] += 1
                 continue
 
-            exitcode, output, runtime = self.run_test(testset, test)
+            append_coverity_code(testfile)
+
+            exitcode, output, runtime = self.run_test(testfile, timeout)
             expected_failure = test.get("expected-failure", False)
 
             # Timeout happened.
@@ -156,9 +202,10 @@ class TestRunner(object):
             if not self.quiet:
                 print(output, end="")
 
-    def run_test(self, testset, test):
-        timeout = test.get("timeout", self.timeout)
-        command = [self.iotjs, fs.join(testset, test["name"])]
+            remove_coverity_code(testfile)
+
+    def run_test(self, testfile, timeout):
+        command = [self.iotjs, testfile]
 
         if self.valgrind:
             valgrind_options = [

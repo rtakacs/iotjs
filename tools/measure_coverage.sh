@@ -74,7 +74,7 @@ if [ "$#" -gt "0" ] && ( [ "$1" == "-h" ] || [ "$1" == "--help" ] ); then
 fi
 
 # Don't run this script on x86_64 architecture, only on x86_32
-check_architecture
+#check_architecture
 
 tools_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 iotjs_root=$(readlink -f "$tools_dir/..")
@@ -91,7 +91,7 @@ fi
 . ~/.profile
 
 # Istanbul and babel require node version > 4.0.
-nvm install 6.11.0
+nvm install 4.0
 
 dpkg -l lcov >> /dev/null 2>&1 && \
 dpkg -l gcc-multilib >> /dev/null 2>&1
@@ -145,8 +145,7 @@ mv src/cover_js src/js
 tools/build.py --jerry-cmake-param="-DFEATURE_SYSTEM_ALLOCATOR=ON" \
     --target-arch=x86 --compile-flag="-coverage" --no-snapshot --no-check-test
 
-# Run tests
-build/i686-linux/debug/bin/iotjs tools/check_test.js -- output-coverage=yes
+python tools/testrunner.py ${PWD}/build/i686-linux/debug/bin/iotjs --quiet
 
 # Revert to original module files
 rm -rf src/js
